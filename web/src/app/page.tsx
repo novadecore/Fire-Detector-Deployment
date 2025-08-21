@@ -20,9 +20,51 @@ export default function Page() {
       bounds: bcBounds
     });
 
-    // 保底：等地图加载完后按容器尺寸再算一遍
     map.once('load', () => {
       map.resize();
+
+      // ===== 🔥 Fire Risk overlays start =====
+
+      // A) CWFIS Fire Danger（全国 WMS；日级火险等级）
+      map.addSource('risk-cwfis', {
+        type: 'raster',
+        tiles: [
+          'https://cwfis.cfs.nrcan.gc.ca/geoserver/ows'
+          + '?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1'
+          + '&FORMAT=image/png&TRANSPARENT=true&STYLES='
+          + '&SRS=EPSG:3857&LAYERS=fdr_current'   // fire danger 当前图层
+          + '&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'
+        ],
+        tileSize: 256,
+        attribution: 'Fire Danger © NRCan CWFIS'
+      } as mapboxgl.RasterSourceSpecification);
+      map.addLayer({
+        id: 'risk-cwfis',
+        type: 'raster',
+        source: 'risk-cwfis',
+        paint: { 'raster-opacity': 0.1 }
+      });
+
+      // B) BC PSTA Fire Threat（省级长期威胁；ArcGIS Export 当作瓦片）
+      const bcPstaExport =
+        'https://delivery.maps.gov.bc.ca/arcgis/rest/services/whse/bcgw_pub_whse_land_and_natural_resource/MapServer/export'
+        + '?f=image&format=png32&transparent=true'
+        + '&bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256'
+        + '&layers=show:17'; // 17 = BC Wildfire PSTA Fire Threat Rating
+      map.addSource('risk-psta', {
+        type: 'raster',
+        tiles: [bcPstaExport],
+        tileSize: 256,
+        attribution: 'PSTA © Province of BC'
+      } as mapboxgl.RasterSourceSpecification);
+      map.addLayer({
+        id: 'risk-psta',
+        type: 'raster',
+        source: 'risk-psta',
+        paint: { 'raster-opacity': 0.6 }
+      });
+
+      // ===== 🔥 Fire Risk overlays end =====
     });
 
     // 右上角的缩放/旋转控件
@@ -35,9 +77,6 @@ export default function Page() {
     });
     map.addControl(Draw, 'top-left');
 
-
-
-    // …你的 onCreate 原样保留 …
     const onCreate = async (e: any) => {
       const polygon = e.features[0];
 
@@ -72,7 +111,6 @@ export default function Page() {
     return () => { map.off('draw.create', onCreate); map.remove(); };
   }, []);
 
-  // ✅ 让容器占满视口；避免 main 的 padding 挤压
   return (
     <main style={{ margin: 0, padding: 0 }}>
       <div ref={mapDiv} style={{ height: '100vh', width: '100vw' }} />
